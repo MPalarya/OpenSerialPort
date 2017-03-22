@@ -1,3 +1,19 @@
+        private void portInitData(List<byte> data, out int lenToRead)
+        {
+            _timeoutTimer.Stop();
+            lock (data)
+            {
+                lenToRead = -1;
+                data.Clear();
+            }
+        }
+
+        private void portResetTimer()
+        {
+            _timeoutTimer.Stop();
+            _timeoutTimer.Start();
+        }
+
         public void Open()
         {
             if (port != null)
@@ -50,8 +66,7 @@
                                             // have read some bytes, but not enough
                                             else
                                                 // not finished yet - not enough bytes to deduce lenToRead
-                                                _timeoutTimer.Stop();
-                                                _timeoutTimer.Start();
+                                                portResetTimer();
                                         }
 
                                         // we read enough bytes to know lenToRead
@@ -74,9 +89,6 @@
                                             {
                                                 if (lenToRead == data.Count && this.BytesReceived != null)
                                                 {
-                                                    // avoid loss of data
-                                                    _timeoutTimer.Stop();
-
                                                     byte[] tmpArray = data.ToArray();
 
                                                     portInitData(data, out lenToRead);
@@ -87,10 +99,7 @@
 
                                                 // not finished yet - still bytes to read until lenToRead
                                                 else if (lenToRead > data.Count)
-                                                {
-                                                    _timeoutTimer.Stop();
-                                                    _timeoutTimer.Start();
-                                                }
+                                                    portResetTimer();
 
                                                 // error - read more than we should, msg is invalid
                                                 else
