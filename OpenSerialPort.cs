@@ -1,3 +1,5 @@
+        private System.Timers.Timer _timeoutTimer = null;
+        
         private void portInitData(List<byte> data, out int lenToRead)
         {
             _timeoutTimer.Stop();
