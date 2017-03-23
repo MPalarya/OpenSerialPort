@@ -1,8 +1,10 @@
         private System.Timers.Timer _timeoutTimer = null;
-        
+
         private void portInitData(List<byte> data, out int lenToRead)
         {
-            _timeoutTimer.Stop();
+            if (_timeoutTimer != null && _timeoutTimer.Enabled)
+                _timeoutTimer.Stop();
+
             lock (data)
             {
                 lenToRead = -1;
@@ -12,8 +14,13 @@
 
         private void portResetTimer()
         {
-            _timeoutTimer.Stop();
-            _timeoutTimer.Start();
+            if (_timeoutTimer != null)
+            {
+                if (_timeoutTimer.Enabled)
+                    _timeoutTimer.Stop();
+
+                _timeoutTimer.Start();
+            }
         }
 
         public void Open()
@@ -52,6 +59,7 @@
                                 try
                                 {
                                     int currentReadLength = port.BaseStream.EndRead(ar);
+                                    
                                     byte[] receivedBytes = new byte[currentReadLength];
                                     Buffer.BlockCopy(buffer, 0, receivedBytes, 0, currentReadLength);
                                     lock (data)
