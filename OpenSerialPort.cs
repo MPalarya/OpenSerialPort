@@ -12,7 +12,7 @@
             }
         }
 
-        private void portResetTimer()
+        private void RestartTimer()
         {
             if (_timeoutTimer != null)
             {
@@ -59,36 +59,32 @@
                                 try
                                 {
                                     int currentReadLength = port.BaseStream.EndRead(ar);
-                                    
-                                    byte[] receivedBytes = new byte[currentReadLength];
-                                    Buffer.BlockCopy(buffer, 0, receivedBytes, 0, currentReadLength);
+
                                     lock (data)
                                     {
-                                        data.AddRange(receivedBytes);
+                                        for (int i = 0; i < currentReadLength; i++)
+                                            data.Add(buffer[i]);
 
-                                        // we don't have enough bytes to deduce lenToRead
+                                        // not enough bytes to deduce lenToRead
                                         if (data.Count < 2)
                                         {
-                                            // error - not possible, lenToRead is deduced by data
+                                            // error - cannot deduce lenToRead without reading first 2 bytes
                                             if (lenToRead >= 2)
                                                 portInitData(data, out lenToRead);
 
-                                            // have read some bytes, but not enough
+                                            // not finished yet - not enough bytes to deduce lenToRead
                                             else
-                                                // not finished yet - not enough bytes to deduce lenToRead
-                                                portResetTimer();
+                                                RestartTimer();
                                         }
 
-                                        // we read enough bytes to know lenToRead
+                                        // lenToRead is known
                                         else
                                         {
                                             if (lenToRead < 2)
                                             {
-                                                // get lenToRead
-                                                byte[] lenArray = new byte[] { data[0], data[1] };
-                                                lenToRead = EndianBitConverter.Little.ToInt16(lenArray, 0);
+                                                lenToRead = EndianBitConverter.Little.ToInt16(new byte[] { data[0], data[1] }, 0);
 
-                                                // error - length must be > 2
+                                                // error - already received 2 bytes, lenToRead must be >= 2
                                                 if (lenToRead < 2)
                                                     portInitData(data, out lenToRead);
                                             }
@@ -97,23 +93,40 @@
                                             // careful not to use 'else' here:
                                             if (lenToRead >= 2)
                                             {
+                                                // finished
                                                 if (lenToRead == data.Count && this.BytesReceived != null)
                                                 {
-                                                    byte[] tmpArray = data.ToArray();
-
+                                                    BytesReceived(this, data.ToArray());
                                                     portInitData(data, out lenToRead);
-
-                                                    // finished - raise event
-                                                    BytesReceived(this, tmpArray);
                                                 }
 
-                                                // not finished yet - still bytes to read until lenToRead
+                                                // not finished yet - still have bytes to read until lenToRead
                                                 else if (lenToRead > data.Count)
-                                                    portResetTimer();
+                                                    RestartTimer();
 
-                                                // error - read more than we should, msg is invalid
+                                                // the actual msg is longer than we expected (data.Count > lenToRead)
+                                                // handle case of multiple msgs concatenated by splitting
                                                 else
-                                                    portInitData(data, out lenToRead);
+                                                {
+                                                    // handle each msg separately and restart timer
+                                                    // if partial msg is left, let recursion handle it
+                                                    while (data.Count >= lenToRead)
+                                                    {
+                                                        BytesReceived(this, data.GetRange(0, lenToRead).ToArray());
+                                                        data.RemoveRange(0, lenToRead);
+
+                                                        if (data.Count >= 2)
+                                                            lenToRead = EndianBitConverter.Little.ToInt16(new byte[] { data[0], data[1] }, 0);
+                                                        else
+                                                            lenToRead = -1;
+                                                        
+                                                        // handled an entire msg and nothing left in list, start receiving again
+                                                        if (data.Count == 0)
+                                                            portInitData(data, out lenToRead);
+
+                                                        RestartTimer();
+                                                    }
+                                                }
                                             }
                                         }
                                     }
